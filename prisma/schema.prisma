@@ -1,0 +1,167 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+generator client {
+  provider = "prisma-client-js"
+}
+
+// datasource db {
+//   provider = "postgresql"
+//   url      = env("DATABASE_URL")
+// }
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL") // uses connection pooling
+}
+
+model User {
+  id                  String              @id @default(uuid())
+  categoryAccount     EnumCategoryAccount @default(CUSTOMER)
+  firstname           String
+  contact             String?             @unique
+  desc                String?
+  agence              String?
+  lastname            String
+  email               String              @unique
+  password            String
+  address             String?
+  city                String?
+  country             String?
+  profilePicture      String?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  isActive            Boolean             @default(false)
+  activationToken     String?             @unique
+  passwordResetToken  String?             @unique
+  passwordResetExpiry DateTime?
+  planSubscriptionId  String?
+  subscription        PlanSubscription?   @relation(fields: [planSubscriptionId], references: [id], onDelete: SetNull)
+  properties          Property[]
+  missionsRequested   Mission[]           @relation("UserMissions")
+  missionsAssigned    Mission[]           @relation("AgentMissions")
+  bookings            Booking[]
+}
+
+enum EnumCategoryAccount {
+  AGENT
+  AGENCE
+  ADMIN
+  CUSTOMER
+}
+
+model PlanSubscription {
+  id                     String   @id @default(uuid())
+  name                   String
+  price                  Float
+  monthDuration          Int
+  infos                  String[]
+  visiblePropertiesLimit Int      @default(5)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+  users                  User[]
+}
+
+model Property {
+  id                String            @id @default(uuid())
+  title             String
+  description       String
+  price             Float
+  type              EnumTypeProperty
+  category          EnumApartmentType
+  isSale            Boolean           @default(false)
+  isVisible         Boolean           @default(true)
+  location          String
+  images            String[]
+  address           String
+  longitude         Float
+  latitude          Float
+  chambres          Int
+  sallesDeBain      Int
+  salon             Int
+  surface           Float
+  isWifi            Boolean           @default(false)
+  isParking         Boolean           @default(false)
+  isClimatisation   Boolean           @default(false)
+  isPiscine         Boolean           @default(false)
+  isGarden          Boolean           @default(false)
+  isAscenseur       Boolean           @default(false)
+  isAnimauxAcceptes Boolean           @default(false)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  userId   String
+  desc     String?
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bookings Booking[]
+
+  @@index([price])
+  @@index([location])
+  @@index([longitude, latitude])
+}
+
+model Booking {
+  id         String        @id @default(uuid())
+  startDate  DateTime
+  endDate    DateTime?
+  status     BookingStatus @default(PENDING)
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+  price      Decimal       @db.Decimal(10, 2)
+  customerId String
+  propertyId String
+  customer   User          @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  property   Property      @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([customerId, propertyId])
+}
+
+enum EnumTypeProperty {
+  RENT
+  SALE
+}
+
+enum EnumApartmentType {
+  APPARTEMENT
+  VILLA
+  MAISON
+  CHAMBRE
+  TERRAIN
+  DUPLEX
+  MEUBLE
+}
+
+model Mission {
+  id            String            @id @default(uuid())
+  userId        String
+  user          User              @relation("UserMissions", fields: [userId], references: [id], onDelete: Cascade)
+  agentId       String?
+  agent         User?             @relation("AgentMissions", fields: [agentId], references: [id], onDelete: Cascade)
+  // when an agent accepts the mission
+  agentMessage  String?
+  acceptedAt    DateTime?
+  // location details – address plus optional city/country for filtering and display
+  address       String
+  city          String?
+  country       String?
+  minPrice      Float
+  maxPrice      Float
+  apartmentType EnumApartmentType
+  description   String
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  @@index([userId])
+  @@index([agentId])
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+}
+
+model WaitlistEntry {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  createdAt DateTime @default(now())
+}

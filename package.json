@@ -1,0 +1,31 @@
+{
+   "name": "watome-backend",
+   "version": "1.0.0",
+   "description": " Backend for Watome, a property management application.",
+   "main": "index.js",
+   "type": "module",
+   "scripts": {
+      "dev": "nodemon index.js",
+      "test": "echo \"Error: no test specified\" && exit 1"
+   },
+   "keywords": [],
+   "author": "",
+   "license": "ISC",
+   "dependencies": {
+      "@prisma/client": "^5.22.0",
+      "bcrypt": "^6.0.0",
+      "cookie-parser": "^1.4.7",
+      "cors": "^2.8.6",
+      "datauri": "^4.1.0",
+      "dotenv": "^17.3.1",
+      "express": "^5.2.1",
+      "jsonwebtoken": "^9.0.3",
+      "multer": "^2.0.2",
+      "prisma": "^5.2.1",
+      "resend": "^6.9.2",
+      "uuid": "^13.0.0"
+   },
+   "devDependencies": {
+      "nodemon": "^3.1.14"
+   }
+}
