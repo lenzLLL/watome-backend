@@ -7,9 +7,6 @@
         "config": { "zeroConfig": true }
       }
     ],
-      "hooks": {
-    "build": "npx prisma generate"
-  },
     "routes": [
       {
         "src": "/api/.*",
