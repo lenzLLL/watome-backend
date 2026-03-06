@@ -9,11 +9,24 @@ export const registerWaitlist = async (req, res) => {
         const { email } = req.body
         console.log("KEY:", process.env.RESEND_API_KEY)
         if (!email) return res.status(400).json({ error: "Email required" })
-        // upsert to avoid duplicates
-        const entry = await prisma.waitlistEntry.upsert({
-            where: { email },
-            update: {},
-            create: { email }
+        
+        console.log("📧 Tentative d'enregistrement pour:", email)
+        
+        // Check if email already exists
+        const existingEntry = await prisma.waitlistEntry.findUnique({
+            where: { email }
+        })
+
+        console.log("Vérification - Email existe?", existingEntry ? "OUI ✓" : "NON")
+
+        if (existingEntry) {
+            console.log("❌ Email déjà enregistré, renvoi 409")
+            return res.status(409).json({ error: "Cette adresse email est déjà inscrite à la liste d'attente" })
+        }
+
+        // Create new entry
+        const entry = await prisma.waitlistEntry.create({
+            data: { email }
         })
 
         // send bilingual confirmation
@@ -34,7 +47,12 @@ export const registerWaitlist = async (req, res) => {
           });
 
         if (error) {
-           return res.status(400).json({ error });
+           // resend gives an object; convert to string for clients
+           const errMsg =
+             typeof error === 'string'
+               ? error
+               : error?.message || JSON.stringify(error);
+           return res.status(400).json({ error: errMsg });
          }
 
         return res.status(201).json({ message: "Registered", entry })
