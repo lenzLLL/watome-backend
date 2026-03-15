@@ -18,7 +18,7 @@ model User {
   id                  String              @id @default(uuid())
   categoryAccount     EnumCategoryAccount @default(CUSTOMER)
   firstname           String
-  contact             String?             @unique
+  phone               String?             @unique
   desc                String?
   agence              String?
   lastname            String
@@ -34,12 +34,21 @@ model User {
   activationToken     String?             @unique
   passwordResetToken  String?             @unique
   passwordResetExpiry DateTime?
+
+  // Agent-specific fields
+  languages           String[]            @default([])
+  experience          String?
+  salesCount          Int                 @default(0)
+  specialties         String[]            @default([])
+  bio                 String?
+
   planSubscriptionId  String?
   subscription        PlanSubscription?   @relation(fields: [planSubscriptionId], references: [id], onDelete: SetNull)
   properties          Property[]
   missionsRequested   Mission[]           @relation("UserMissions")
   missionsAssigned    Mission[]           @relation("AgentMissions")
   bookings            Booking[]
+  subscriptionHistory SubscriptionHistory[]
 }
 
 enum EnumCategoryAccount {
@@ -59,6 +68,64 @@ model PlanSubscription {
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
   users                  User[]
+  subscriptions          UserSubscription[]
+  subscriptionHistory    SubscriptionHistory[]
+}
+
+model UserSubscription {
+  id                String         @id @default(uuid())
+  userId            String         @unique
+  planId            String
+  startDate         DateTime       @default(now())
+  endDate           DateTime
+  paymentMethod     String?
+  amount            Float
+  status            String         @default("ACTIVE")
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  plan              PlanSubscription @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([planId])
+}
+
+model SubscriptionHistory {
+  id                String         @id @default(uuid())
+  userId            String
+  planId            String
+  action            SubscriptionAction
+  amount            Float
+  paymentMethod     String?
+  paymentStatus     PaymentStatus  @default(PENDING)
+  transactionId     String?
+  startDate         DateTime
+  endDate           DateTime
+  notes             String?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan              PlanSubscription @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([planId])
+  @@index([createdAt])
+}
+
+enum SubscriptionAction {
+  SUBSCRIBE
+  RENEW
+  UPGRADE
+  DOWNGRADE
+  CANCEL
+  EXPIRE
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
 }
 
 model Property {
@@ -132,8 +199,8 @@ enum EnumApartmentType {
 
 model Mission {
   id            String            @id @default(uuid())
-  userId        String
-  user          User              @relation("UserMissions", fields: [userId], references: [id], onDelete: Cascade)
+  userId        String?
+  user          User?              @relation("UserMissions", fields: [userId], references: [id], onDelete: Cascade)
   agentId       String?
   agent         User?             @relation("AgentMissions", fields: [agentId], references: [id], onDelete: Cascade)
   // when an agent accepts the mission
@@ -141,8 +208,12 @@ model Mission {
   acceptedAt    DateTime?
   // location details – address plus optional city/country for filtering and display
   address       String
-  city          String?
-  country       String?
+  city          String
+  country       String
+  // customer contact info (required if not logged in)
+  customerEmail String?
+  customerPhone String?
+  customerName  String?
   minPrice      Float
   maxPrice      Float
   apartmentType EnumApartmentType

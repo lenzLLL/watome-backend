@@ -68,28 +68,57 @@ export const getMission = async (req, res) => {
 
 export const createMission = async (req, res) => {
     try {
-        const requesterId = req.user?.userId
-        if (!requesterId) return res.status(401).json({ error: "Authentication required" })
+        const requesterId = req.user?.userId // May be null if not authenticated
 
-        // simple validation
-        const { address, city, country, minPrice, maxPrice, apartmentType, description } = req.body
-        // address is mandatory; city/country are optional but often important
-        if (!address || minPrice == null || maxPrice == null || !apartmentType || !description) {
-            return res.status(400).json({ error: "address, minPrice, maxPrice, apartmentType and description are required" })
+        // Validation
+        const { address, city, country, minPrice, maxPrice, apartmentType, description, customerEmail, customerPhone, customerName, agentId } = req.body
+
+        // Address, city, country are mandatory and must be selected from Mapbox
+        if (!address || !city || !country || minPrice == null || maxPrice == null || !apartmentType || !description) {
+            return res.status(400).json({ error: "address, city, country, minPrice, maxPrice, apartmentType and description are required" })
+        }
+
+        // If not authenticated, customerEmail and customerPhone are required
+        if (!requesterId) {
+            if (!customerEmail || !customerPhone) {
+                return res.status(400).json({ error: "customerEmail and customerPhone are required for anonymous missions" })
+            }
+        }
+
+        // If agentId is provided, validate that the agent exists and is actually an agent
+        if (agentId) {
+            const agent = await prisma.user.findUnique({ where: { id: agentId } })
+            if (!agent) {
+                return res.status(404).json({ error: "Agent not found" })
+            }
+            if (agent.categoryAccount !== "AGENT" && agent.categoryAccount !== "AGENCE") {
+                return res.status(400).json({ error: "Specified user is not an agent" })
+            }
+        }
+
+        const missionData = {
+            address,
+            city,
+            country,
+            minPrice: Number(minPrice),
+            maxPrice: Number(maxPrice),
+            apartmentType,
+            description,
+            customerEmail: customerEmail || null,
+            customerPhone: customerPhone || null,
+            customerName: customerName || null,
+            agentId: agentId || null
+        }
+
+        // Link to user if authenticated
+        if (requesterId) {
+            missionData.userId = requesterId
         }
 
         const mission = await prisma.mission.create({
-            data: {
-                userId: requesterId,
-                address,
-                city: city || null,
-                country: country || null,
-                minPrice: Number(minPrice),
-                maxPrice: Number(maxPrice),
-                apartmentType,
-                description
-            }
+            data: missionData
         })
+
         return res.status(201).json(mission)
     } catch (err) {
         console.error(err)
