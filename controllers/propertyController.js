@@ -4,6 +4,21 @@ import prisma from "../lib/db.js"
 const isAgent = (user) => user && (user.categoryAccount === "AGENT" || user.categoryAccount === "AGENCE")
 const isAdmin = (user) => user && user.categoryAccount === "ADMIN"
 
+// Helper function to serialize BigInt fields
+const serializeProperty = (property) => {
+    return {
+        ...property,
+        views: property.views ? Number(property.views) : 0
+    }
+}
+
+const serializeProperties = (properties) => {
+    if (Array.isArray(properties)) {
+        return properties.map(serializeProperty)
+    }
+    return serializeProperty(properties)
+}
+
 // helper to get user's plan limit (default 5 if none)
 // Prefers the current active subscription (UserSubscription) when available.
 const getVisibleLimit = async (userId) => {
@@ -82,7 +97,7 @@ export const getAgentPublicProperties = async (req, res) => {
             })
         ])
 
-        return res.status(200).json({ properties, total, page: Number(page), limit: take })
+        return res.status(200).json({ properties: serializeProperties(properties), total, page: Number(page), limit: take })
     } catch (err) {
         console.error("getAgentPublicProperties error:", err)
         return res.status(500).json({ error: "Internal Server Error" })
@@ -116,7 +131,7 @@ export const getAgentProperties = async (req, res) => {
             prisma.property.count({ where: { userId } })
         ])
 
-        return res.status(200).json({ properties, total, page: Number(page), limit: take })
+        return res.status(200).json({ properties: serializeProperties(properties), total, page: Number(page), limit: take })
     } catch (err) {
         console.error("getAgentProperties error:", err)
         return res.status(500).json({ error: "Internal Server Error" })
@@ -125,7 +140,7 @@ export const getAgentProperties = async (req, res) => {
 
 export const getProperties = async (req, res) => {
     try {
-        const { page = 1, limit = 20, search, userId, city, country, minLat, maxLat, minLng, maxLng } = req.query
+        const { page = 1, limit = 20, search, userId, city, country, minLat, maxLat, minLng, maxLng, category, exclude } = req.query
         const where = {}
 
         // full-text style search on title/description/location
@@ -135,6 +150,16 @@ export const getProperties = async (req, res) => {
                 { description: { contains: search, mode: "insensitive" } },
                 { location: { contains: search, mode: "insensitive" } }
             ]
+        }
+
+        // filter by category
+        if (category) {
+            where.category = category
+        }
+
+        // exclude specific property
+        if (exclude) {
+            where.id = { not: exclude }
         }
 
         // filter by explicit city/country if provided (assumes stored in location)
@@ -182,7 +207,7 @@ export const getProperties = async (req, res) => {
         const skip = (Number(page) - 1) * take
         const properties = await prisma.property.findMany({ where, skip, take })
         const total = await prisma.property.count({ where })
-        return res.status(200).json({ properties, total, page: Number(page), limit: take })
+        return res.status(200).json({ properties: serializeProperties(properties), total, page: Number(page), limit: take })
     } catch (err) {
         console.error(err)
         return res.status(500).json({ error: "Internal Server Error" })
@@ -192,9 +217,30 @@ export const getProperties = async (req, res) => {
 export const getProperty = async (req, res) => {
     try {
         const { id } = req.params
-        const prop = await prisma.property.findUnique({ where: { id } })
+        const prop = await prisma.property.findUnique({
+            where: { id },
+            include: {
+                user: {
+                    select: {
+                        id: true,
+                        firstname: true,
+                        lastname: true,
+                        email: true,
+                        phone: true,
+                        agence: true,
+                        profilePicture: true,
+                        categoryAccount: true,
+                        bio: true,
+                        languages: true,
+                        experience: true,
+                        salesCount: true,
+                        specialties: true
+                    }
+                }
+            }
+        })
         if (!prop) return res.status(404).json({ error: "Property not found" })
-        return res.status(200).json(prop)
+        return res.status(200).json(serializeProperty(prop))
     } catch (err) {
         console.error(err)
         return res.status(500).json({ error: "Internal Server Error" })
@@ -541,5 +587,33 @@ export const checkVisibilityQuota = async (req, res) => {
         console.error("Check visibility quota error:", err)
         const errorMessage = err instanceof Error ? err.message : String(err);
         return res.status(500).json({ error: "Erreur lors de la vérification du quota", details: errorMessage })
+    }
+}
+
+export const incrementViews = async (req, res) => {
+    try {
+        const { id } = req.params
+
+        if (!id) {
+            return res.status(400).json({ error: "Property ID is required" })
+        }
+
+        // Increment views count
+        const updatedProperty = await prisma.property.update({
+            where: { id },
+            data: {
+                views: {
+                    increment: 1
+                }
+            }
+        })
+
+        return res.status(200).json({
+            success: true,
+            views: updatedProperty.views
+        })
+    } catch (err) {
+        console.error("Increment views error:", err)
+        return res.status(500).json({ error: "Erreur lors de l'incrémentation des vues" })
     }
 }

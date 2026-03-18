@@ -12,6 +12,7 @@ import waitlistRoutes from "./routes/waitlistRoute.js"
 import missionRoutes from "./routes/missionRoute.js"
 import statsRoutes from "./routes/statsRoute.js"
 import planRoutes from "./routes/planRoute.js"
+import favoriteRoutes from "./routes/favoriteRoute.js"
 
 const app = express()
 
@@ -43,6 +44,7 @@ app.use("/api/waitlist", waitlistRoutes)
 app.use("/api/missions", missionRoutes)
 app.use("/api/stats", statsRoutes)
 app.use("/api/plans", planRoutes)
+app.use("/api/favorites", favoriteRoutes)
 
 const port = process.env.PORT||8080
 app.listen(

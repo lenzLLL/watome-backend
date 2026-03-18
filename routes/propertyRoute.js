@@ -11,7 +11,8 @@ import {
     toggleVisibility,
     checkVisibilityQuota,
     getAgentProperties,
-    getAgentPublicProperties
+    getAgentPublicProperties,
+    incrementViews
 } from "../controllers/propertyController.js"
 
 const router = Router()
@@ -37,6 +38,7 @@ router.get("/", getProperties)
 router.get("/agent/:agentId", getAgentPublicProperties) // Public route for agent properties
 router.get("/agent", verifyToken, getAgentProperties) // must come before /:id to avoid param collision
 router.get("/visibility-quota", verifyToken, checkVisibilityQuota) // must come before /:id
+router.patch("/:id/increment-views", incrementViews) // Public route to increment views
 router.get("/:id", getProperty)
 
 // modify operations require authentication

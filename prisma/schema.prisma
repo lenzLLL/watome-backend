@@ -48,6 +48,7 @@ model User {
   missionsRequested   Mission[]           @relation("UserMissions")
   missionsAssigned    Mission[]           @relation("AgentMissions")
   bookings            Booking[]
+  favorites           Favorite[]
   subscriptionHistory SubscriptionHistory[]
 }
 
@@ -157,9 +158,11 @@ model Property {
   updatedAt         DateTime          @updatedAt
 
   userId   String
+  views    BigInt       @default(0)
   desc     String?
   user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   bookings Booking[]
+  favorites Favorite[]
 
   @@index([price])
   @@index([location])
@@ -235,4 +238,18 @@ model WaitlistEntry {
   id        String   @id @default(uuid())
   email     String   @unique
   createdAt DateTime @default(now())
+}
+
+model Favorite {
+  id         String   @id @default(uuid())
+  userId     String
+  propertyId String
+  createdAt  DateTime @default(now())
+  
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, propertyId])
+  @@index([userId])
+  @@index([propertyId])
 }

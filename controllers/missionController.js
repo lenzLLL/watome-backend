@@ -11,7 +11,7 @@ const isAgent = (user) => user && (user.categoryAccount === "AGENT" || user.cate
 // list missions with sensible scoping
 export const getMissions = async (req, res) => {
     try {
-        const { page = 1, limit = 20 } = req.query
+        const { page = 1, limit = 20, city, status } = req.query
         const where = {}
 
         const requesterId = req.user?.userId
@@ -22,13 +22,28 @@ export const getMissions = async (req, res) => {
             return res.status(401).json({ error: "Authentication required to list missions" })
         }
 
+        // filter by city if provided
+        if (city) {
+            where.city = { contains: city, mode: "insensitive" }
+        }
+
+        // filter by status if provided (PENDING, ACCEPTED, etc.)
+        if (status) {
+            if (status === 'PENDING') {
+                where.agentId = null
+            } else if (status === 'ACCEPTED') {
+                where.agentId = { not: null }
+            }
+        }
+
         if (!isAdmin(dbUser)) {
             if (dbUser.categoryAccount === "CUSTOMER") {
                 where.userId = requesterId
             } else if (isAgent(dbUser)) {
+                // Agents can see all missions in their city (to accept them) plus their own created missions
                 where.OR = [
-                    { userId: requesterId },
-                    { agentId: requesterId }
+                    { city: { contains: city || '', mode: "insensitive" } },
+                    { userId: requesterId }
                 ]
             }
         }
@@ -193,23 +208,58 @@ export const acceptMission = async (req, res) => {
         // send bilingual email notification to mission owner
         if (updated.user && updated.user.email) {
             const subject = "Votre mission a été prise en charge / Your mission has been accepted"
+            const whatsappLink = dbUser.phone ? `https://wa.me/${dbUser.phone.replace(/\D/g, '')}` : null
+            
             const fr = `
-                <p>Bonjour ${updated.user.firstname || ''},</p>
-                <p>Un agent a accepté votre mission.</p>
-                <p><strong>Nom :</strong> ${dbUser.firstname || ''} ${dbUser.lastname || ''}</p>
-                <p><strong>Email :</strong> ${dbUser.email}</p>
-                ${message ? `<p><strong>Message de l'agent :</strong> ${message}</p>` : ''}
-                <p>Adresse de la mission : ${updated.address || ''}${updated.city ? ', ' + updated.city : ''}${updated.country ? ', ' + updated.country : ''}</p>
-                <hr/>
+                <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+                    <h2 style="color: #FF8C00;">Bonne nouvelle ! Votre mission a été prise en charge</h2>
+                    <p>Bonjour ${updated.user.firstname || ''},</p>
+                    <p>Un agent a accepté votre mission et est intéressé pour vous aider.</p>
+                    
+                    <div style="background-color: #f9f9f9; padding: 15px; border-left: 4px solid #FF8C00; margin: 20px 0;">
+                        <p><strong>Détails de l'agent :</strong></p>
+                        <p>📌 <strong>Nom :</strong> ${dbUser.firstname || ''} ${dbUser.lastname || ''}</p>
+                        <p>✉️ <strong>Email :</strong> ${dbUser.email}</p>
+                        ${dbUser.phone ? `<p>📱 <strong>WhatsApp :</strong> ${dbUser.phone}</p>` : ''}
+                        ${message ? `<p>💬 <strong>Message de l'agent :</strong> ${message}</p>` : ''}
+                    </div>
+                    
+                    <div style="background-color: #f0f0f0; padding: 15px; margin: 20px 0;">
+                        <p><strong>Adresse de la mission :</strong></p>
+                        <p>${updated.address || ''}${updated.city ? ', ' + updated.city : ''}${updated.country ? ', ' + updated.country : ''}</p>
+                    </div>
+                    
+                    ${whatsappLink ? `<p><a href="${whatsappLink}" style="background-color: #25D366; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">💬 Contacter sur WhatsApp</a></p>` : ''}
+                    
+                    <p style="color: #666; font-size: 12px; margin-top: 30px;">Cet email a été envoyé par Watome. Veuillez ne pas y répondre.</p>
+                </div>
             `
+            
             const en = `
-                <p>Hello ${updated.user.firstname || ''},</p>
-                <p>An agent has accepted your request.</p>
-                <p><strong>Name:</strong> ${dbUser.firstname || ''} ${dbUser.lastname || ''}</p>
-                <p><strong>Email:</strong> ${dbUser.email}</p>
-                ${message ? `<p><strong>Agent's message:</strong> ${message}</p>` : ''}
-                <p>Mission address: ${updated.address || ''}${updated.city ? ', ' + updated.city : ''}${updated.country ? ', ' + updated.country : ''}</p>
+                <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin-top: 40px; padding-top: 20px; border-top: 1px solid #ddd;">
+                    <h2 style="color: #FF8C00;">Great news! Your mission has been accepted</h2>
+                    <p>Hello ${updated.user.firstname || ''},</p>
+                    <p>An agent has accepted your request and is interested in helping you.</p>
+                    
+                    <div style="background-color: #f9f9f9; padding: 15px; border-left: 4px solid #FF8C00; margin: 20px 0;">
+                        <p><strong>Agent details:</strong></p>
+                        <p>📌 <strong>Name:</strong> ${dbUser.firstname || ''} ${dbUser.lastname || ''}</p>
+                        <p>✉️ <strong>Email:</strong> ${dbUser.email}</p>
+                        ${dbUser.phone ? `<p>📱 <strong>WhatsApp:</strong> ${dbUser.phone}</p>` : ''}
+                        ${message ? `<p>💬 <strong>Agent's message:</strong> ${message}</p>` : ''}
+                    </div>
+                    
+                    <div style="background-color: #f0f0f0; padding: 15px; margin: 20px 0;">
+                        <p><strong>Mission address:</strong></p>
+                        <p>${updated.address || ''}${updated.city ? ', ' + updated.city : ''}${updated.country ? ', ' + updated.country : ''}</p>
+                    </div>
+                    
+                    ${whatsappLink ? `<p><a href="${whatsappLink}" style="background-color: #25D366; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">💬 Contact on WhatsApp</a></p>` : ''}
+                    
+                    <p style="color: #666; font-size: 12px; margin-top: 30px;">This email was sent by Watome. Please do not reply to this email.</p>
+                </div>
             `
+            
             await resend.emails.send({
                 from: "Watome <onboarding@resend.dev>",
                 to: updated.user.email,
