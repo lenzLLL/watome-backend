@@ -6,15 +6,6 @@
         "use": "@vercel/node",
         "config": { "zeroConfig": true }
       }
-    ],
-    "routes": [
-      {
-        "src": "/api/.*",
-        "dest": "index.js"
-      },
-      {
-        "src": "/(.*)",
-        "dest": "/index.html"
-      }
     ]
+
   }
