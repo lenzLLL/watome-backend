@@ -32,8 +32,34 @@ const upload = multer({
     }
 })
 
-app.use(cors({origin:"https://watome-frontend.vercel.app",methods:["GET","POST","DELETE","PUT","PATCH"],credentials:true}))
-// app.use(cors({origin:"http://localhost:3000",methods:["GET","POST","DELETE","PUT","PATCH"],credentials:true}))
+const allowedOrigins = [
+  "https://watome-frontend.vercel.app",
+  "http://localhost:3000",
+  "http://127.0.0.1:3000"
+];
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps, curl, Postman)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error("CORS policy: Origin not allowed"));
+  },
+  methods: ["GET", "POST", "DELETE", "PUT", "PATCH", "OPTIONS"],
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization",
+    "X-Requested-With",
+    "Accept",
+    "Origin"
+  ],
+  credentials: true,
+};
+
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
 app.use(cookieParser())
 app.use(express.json({limit: '50mb'}))
 app.use("/api/auth",authRoutes)
@@ -46,9 +72,13 @@ app.use("/api/stats", statsRoutes)
 app.use("/api/plans", planRoutes)
 app.use("/api/favorites", favoriteRoutes)
 
-const port = process.env.PORT||8080
-app.listen(
-    port,()=>{
-        console.log(`Server is running on ${port}`)
-    }
-)
+// In serverless environments (like Vercel), we export the Express app as the handler.
+// When running locally, start the server normally.
+if (!process.env.VERCEL) {
+  const port = process.env.PORT || 8080
+  app.listen(port, () => {
+    console.log(`Server is running on ${port}`)
+  })
+}
+
+export default app
