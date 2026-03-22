@@ -1,6 +1,6 @@
 import {Router} from "express"
 import multer from "multer"
-import { getUsers, getAgents, getAgent, getUser, getMe, updateUser, updateMe, deleteUser, deleteMe, removePlan, upgradePlan, setPlanPricing, becomeAgent, getPlans, createPlan, updatePlan, deletePlan, adminSetUserPlan, getPaymentHistory, getUserSubscriptionHistory, uploadProfilePhoto } from "../controllers/userController.js"
+import { getUsers, getAgents, getAgent, getAgentReviews, postAgentReview, deleteAgentReview, getUser, getMe, updateUser, updateMe, deleteUser, deleteMe, removePlan, upgradePlan, setPlanPricing, becomeAgent, getPlans, createPlan, updatePlan, deletePlan, adminSetUserPlan, getPaymentHistory, getUserSubscriptionHistory, uploadProfilePhoto } from "../controllers/userController.js"
 import { verifyToken } from "../middleware/verifyToken.js"
 import { requireAdmin } from "../middleware/roles.js"
 
@@ -20,9 +20,12 @@ const router = Router()
 // Public routes
 router.get("/agents", getAgents) // Public route for listing agents
 router.get("/agents/:id", getAgent) // Public route for agent details
+router.get("/agents/:id/reviews", getAgentReviews) // Public route for agent reviews
 
 // Protected routes (require authentication)
 router.use(verifyToken)
+router.post("/agents/:id/reviews", postAgentReview)
+router.delete("/agents/:id/reviews", deleteAgentReview)
 router.put("/update", updateMe)
 router.get("/", getUsers)
 router.get("/me", getMe)

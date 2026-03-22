@@ -240,7 +240,23 @@ export const getProperty = async (req, res) => {
             }
         })
         if (!prop) return res.status(404).json({ error: "Property not found" })
-        return res.status(200).json(serializeProperty(prop))
+
+        const agentReviewStats = await prisma.agentReview.aggregate({
+            where: { agentId: prop.userId },
+            _avg: { rating: true },
+            _count: { rating: true }
+        })
+
+        const propertyWithAgentRating = {
+            ...prop,
+            user: {
+                ...prop.user,
+                rating: Number((agentReviewStats._avg.rating ?? 0).toFixed(1)),
+                reviewCount: agentReviewStats._count.rating
+            }
+        }
+
+        return res.status(200).json(serializeProperty(propertyWithAgentRating))
     } catch (err) {
         console.error(err)
         return res.status(500).json({ error: "Internal Server Error" })
@@ -610,7 +626,7 @@ export const incrementViews = async (req, res) => {
 
         return res.status(200).json({
             success: true,
-            views: updatedProperty.views
+            views: typeof updatedProperty.views === 'bigint' ? Number(updatedProperty.views) : updatedProperty.views
         })
     } catch (err) {
         console.error("Increment views error:", err)

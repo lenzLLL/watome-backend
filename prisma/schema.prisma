@@ -50,6 +50,11 @@ model User {
   bookings            Booking[]
   favorites           Favorite[]
   subscriptionHistory SubscriptionHistory[]
+
+  // Reviews written by this user as customer
+  reviews             AgentReview[]        @relation("UserReviews")
+  // Reviews received as agent
+  agentReviews        AgentReview[]        @relation("AgentReviews")
 }
 
 enum EnumCategoryAccount {
@@ -182,6 +187,9 @@ model Booking {
   customer   User          @relation(fields: [customerId], references: [id], onDelete: Cascade)
   property   Property      @relation(fields: [propertyId], references: [id], onDelete: Cascade)
 
+  // Reviews associated with this booking
+  reviews    AgentReview[]
+
   @@index([customerId, propertyId])
 }
 
@@ -253,3 +261,24 @@ model Favorite {
   @@index([userId])
   @@index([propertyId])
 }
+
+model AgentReview {
+  id          String   @id @default(uuid())
+  reviewerId  String
+  agentId     String
+  bookingId   String?
+  rating      Int
+  comment     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  reviewer    User     @relation("UserReviews", fields: [reviewerId], references: [id], onDelete: Cascade)
+  agent       User     @relation("AgentReviews", fields: [agentId], references: [id], onDelete: Cascade)
+  booking     Booking? @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+
+  @@index([agentId])
+  @@index([reviewerId])
+  @@index([bookingId])
+  @@unique([reviewerId, agentId])
+}
+

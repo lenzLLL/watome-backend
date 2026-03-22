@@ -276,8 +276,28 @@ export const getAgents = async (req, res) => {
             })
         )
 
+        const ratingGroups = await prisma.agentReview.groupBy({
+            by: ['agentId'],
+            where: {
+                agentId: { in: agentsWithVisibleCount.map(item => item.id) }
+            },
+            _avg: { rating: true },
+            _count: { rating: true }
+        })
+
+        const ratingMap = Object.fromEntries(ratingGroups.map(group => [group.agentId, { avg: group._avg.rating ?? 0, count: group._count.rating }]))
+
+        const agentsResult = agentsWithVisibleCount.map(agent => {
+            const ratingInfo = ratingMap[agent.id] || { avg: 0, count: 0 }
+            return {
+                ...agent,
+                rating: ratingInfo.count > 0 ? Number((ratingInfo.avg || 0).toFixed(1)) : null,
+                reviewCount: ratingInfo.count
+            }
+        })
+
         const total = await prisma.user.count({ where })
-        return res.status(200).json({ agents: agentsWithVisibleCount, total, page: Number(page), limit: take })
+        return res.status(200).json({ agents: agentsResult, total, page: Number(page), limit: take })
     } catch (err) {
         console.error(err)
         return res.status(500).json({ error: "Internal Server Error" })
@@ -335,16 +355,190 @@ export const getAgent = async (req, res) => {
             }
         })
 
-        // Add visible properties count to the response
+        // Calculate rating stats for this agent
+        const reviewStats = await prisma.agentReview.aggregate({
+            where: { agentId: id },
+            _avg: { rating: true },
+            _count: { rating: true }
+        })
+
         const agentWithVisibleCount = {
             ...agent,
             _count: {
                 ...agent._count,
                 visibleProperties: visiblePropertiesCount
-            }
+            },
+            rating: reviewStats._count.rating > 0 ? Number((reviewStats._avg.rating ?? 0).toFixed(1)) : null,
+            reviewCount: reviewStats._count.rating
         }
 
         return res.status(200).json(agentWithVisibleCount)
+    } catch (err) {
+        console.error(err)
+        return res.status(500).json({ error: "Internal Server Error" })
+    }
+}
+
+export const getAgentReviews = async (req, res) => {
+    try {
+        const agentId = req.params.id
+
+        const agent = await prisma.user.findUnique({
+            where: {
+                id: agentId,
+                categoryAccount: { in: ["AGENT", "AGENCE"] },
+                isActive: true
+            }
+        })
+
+        if (!agent) {
+            return res.status(404).json({ error: "Agent not found" })
+        }
+
+        const [reviews, reviewStats] = await Promise.all([
+            prisma.agentReview.findMany({
+                where: { agentId },
+                orderBy: { createdAt: 'desc' },
+                include: {
+                    reviewer: {
+                        select: { id: true, firstname: true, lastname: true, profilePicture: true }
+                    }
+                }
+            }),
+            prisma.agentReview.aggregate({
+                where: { agentId },
+                _avg: { rating: true },
+                _count: { rating: true }
+            })
+        ])
+
+        const formattedReviews = reviews.map((review) => ({
+            id: review.id,
+            reviewer: {
+                id: review.reviewer.id,
+                name: `${review.reviewer.firstname} ${review.reviewer.lastname}`,
+                profilePicture: review.reviewer.profilePicture
+            },
+            rating: review.rating,
+            comment: review.comment,
+            bookingId: review.bookingId,
+            createdAt: review.createdAt,
+            updatedAt: review.updatedAt
+        }))
+
+        return res.status(200).json({
+            reviews: formattedReviews,
+            rating: Number((reviewStats._avg.rating ?? 0).toFixed(1)),
+            reviewCount: reviewStats._count.rating
+        })
+    } catch (err) {
+        console.error(err)
+        return res.status(500).json({ error: "Internal Server Error" })
+    }
+}
+
+export const postAgentReview = async (req, res) => {
+    try {
+        const reviewerId = req.user?.userId
+        const agentId = req.params.id
+        const { rating, comment } = req.body
+
+        if (!reviewerId) {
+            return res.status(401).json({ error: "Authentication required" })
+        }
+
+        if (!rating || isNaN(rating) || rating < 1 || rating > 5) {
+            return res.status(400).json({ error: "Rating must be an integer between 1 and 5" })
+        }
+
+        if (reviewerId === agentId) {
+            return res.status(400).json({ error: "You cannot review yourself" })
+        }
+
+        const agent = await prisma.user.findUnique({
+            where: {
+                id: agentId,
+                categoryAccount: { in: ["AGENT", "AGENCE"] },
+                isActive: true
+            }
+        })
+
+        if (!agent) {
+            return res.status(404).json({ error: "Agent not found" })
+        }
+
+        const hasBooking = await prisma.booking.findFirst({
+            where: {
+                customerId: reviewerId,
+                property: { userId: agentId }
+                // statut de réservation non filtré : toute réservation valide permet de noter
+            }
+        })
+
+        if (!hasBooking) {
+            return res.status(403).json({ error: "Vous devez avoir réservé au moins une propriété de cet agent pour laisser un avis" })
+        }
+
+        const existingReview = await prisma.agentReview.findUnique({
+            where: {
+                reviewerId_agentId: {
+                    reviewerId,
+                    agentId
+                }
+            }
+        })
+
+        let savedReview
+        if (existingReview) {
+            savedReview = await prisma.agentReview.update({
+                where: { id: existingReview.id },
+                data: {
+                    rating: Number(rating),
+                    comment: comment ? String(comment).trim() : null,
+                    updatedAt: new Date()
+                }
+            })
+        } else {
+            savedReview = await prisma.agentReview.create({
+                data: {
+                    reviewerId,
+                    agentId,
+                    bookingId: hasBooking.id,
+                    rating: Number(rating),
+                    comment: comment ? String(comment).trim() : null
+                }
+            })
+        }
+
+        return res.status(201).json(savedReview)
+    } catch (err) {
+        console.error(err)
+        return res.status(500).json({ error: "Internal Server Error" })
+    }
+}
+
+export const deleteAgentReview = async (req, res) => {
+    try {
+        const reviewerId = req.user?.userId
+        const agentId = req.params.id
+
+        if (!reviewerId) {
+            return res.status(401).json({ error: "Authentication required" })
+        }
+
+        const existingReview = await prisma.agentReview.findUnique({
+            where: { reviewerId_agentId: { reviewerId, agentId } }
+        })
+
+        if (!existingReview) {
+            return res.status(404).json({ error: "Avis introuvable" })
+        }
+
+        await prisma.agentReview.delete({
+            where: { id: existingReview.id }
+        })
+
+        return res.status(200).json({ message: "Avis supprimé" })
     } catch (err) {
         console.error(err)
         return res.status(500).json({ error: "Internal Server Error" })
