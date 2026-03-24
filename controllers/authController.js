@@ -165,7 +165,7 @@ export const login = async (req, res) => {
         res.cookie('authToken', tokenJWT, {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production', // HTTPS only en production
-            sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax', // 'lax' pour développement localhost
+            sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', // 'none' pour cross-domain en production
             maxAge: 3 * 24 * 60 * 60 * 1000 // 3 jours en millisecondes
         })
         
@@ -224,7 +224,7 @@ export const logout = (req, res) => {
     res.clearCookie('authToken', {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
-        sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
     });
     return res.status(200).json({ message: "Déconnecté avec succès" });
 }
