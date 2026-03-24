@@ -1,10 +1,9 @@
 import jwt from "jsonwebtoken";
 
 export const verifyToken = (req, res, next) => {
-    // Lire le token depuis Authorization header (priorité) ou cookie
+    // Lire le token depuis Authorization header (préféré) ou cookie authToken en fallback
     let token;
-    
-    // Priorité 1: Authorization header
+
     if (req.headers["authorization"]) {
         const authHeader = req.headers["authorization"];
         if (authHeader.startsWith("Bearer ")) {
@@ -12,10 +11,19 @@ export const verifyToken = (req, res, next) => {
             console.log('VerifyToken - Token extracted from Bearer header');
         }
     }
-    // Fallback: Cookie authToken (pour compatibilité)
-    else if (req.cookies && req.cookies.authToken) {
+
+    if (!token && req.cookies?.authToken) {
         token = req.cookies.authToken;
-        console.log('VerifyToken - Token from authToken cookie');
+        console.log('VerifyToken - Token extracted from authToken cookie');
+    }
+
+    if (!token && req.headers.cookie) {
+        const cookieString = req.headers.cookie;
+        const match = cookieString.match(/(?:^|; )authToken=([^;]+)/);
+        if (match) {
+            token = decodeURIComponent(match[1]);
+            console.log('VerifyToken - Token extracted from Cookie header');
+        }
     }
 
     if (!token) {
@@ -35,12 +43,11 @@ export const verifyToken = (req, res, next) => {
     }
 };
 
-// Optional authentication middleware - sets req.user if token is valid, but doesn't block if no token
+// Optional authentication middleware - sets req.user if token is valid, mais ne bloque pas si pas de token
 export const optionalAuth = (req, res, next) => {
-    // Lire le token depuis Authorization header (priorité) ou cookie
+    // Lire le token depuis Authorization header (préféré) ou cookie authToken en fallback
     let token;
-    
-    // Priorité 1: Authorization header
+
     if (req.headers["authorization"]) {
         const authHeader = req.headers["authorization"];
         if (authHeader.startsWith("Bearer ")) {
@@ -48,10 +55,19 @@ export const optionalAuth = (req, res, next) => {
             console.log('OptionalAuth - Token extracted from Bearer header');
         }
     }
-    // Fallback: Cookie authToken (pour compatibilité)
-    else if (req.cookies && req.cookies.authToken) {
+
+    if (!token && req.cookies?.authToken) {
         token = req.cookies.authToken;
-        console.log('OptionalAuth - Token from authToken cookie');
+        console.log('OptionalAuth - Token extracted from authToken cookie');
+    }
+
+    if (!token && req.headers.cookie) {
+        const cookieString = req.headers.cookie;
+        const match = cookieString.match(/(?:^|; )authToken=([^;]+)/);
+        if (match) {
+            token = decodeURIComponent(match[1]);
+            console.log('OptionalAuth - Token extracted from Cookie header');
+        }
     }
 
     if (token) {

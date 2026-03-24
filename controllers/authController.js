@@ -212,13 +212,8 @@ export const activateAccount = async (req, res) => {
     }
 }
 
-// logout endpoint - clears jwt cookie
+// logout endpoint - pour JWT stateless, il suffit de répondre OK côté API
 export const logout = (req, res) => {
-    res.clearCookie('authToken', {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-    });
     return res.status(200).json({ message: "Déconnecté avec succès" });
 }
 
