@@ -161,15 +161,8 @@ export const login = async (req, res) => {
         const tokenJWT = createToken(user.email, user.id, user.categoryAccount)
         console.log('Login user data:', { id: user.id, email: user.email, firstname: user.firstname, lastname: user.lastname, categoryAccount: user.categoryAccount })
         
-        // Envoyer le token en cookie HTTP-only avec la même durée de vie que le JWT (3 jours)
-        res.cookie('authToken', tokenJWT, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production', // HTTPS only en production
-            sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', // 'none' pour cross-domain en production
-            maxAge: 3 * 24 * 60 * 60 * 1000 // 3 jours en millisecondes
-        })
-        
         return res.status(200).json({
+            token: tokenJWT,
             user: {
                 id: user.id,
                 email: user.email,
