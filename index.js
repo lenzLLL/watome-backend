@@ -13,6 +13,7 @@ import missionRoutes from "./routes/missionRoute.js"
 import statsRoutes from "./routes/statsRoute.js"
 import planRoutes from "./routes/planRoute.js"
 import favoriteRoutes from "./routes/favoriteRoute.js"
+import webhookRoutes from "./routes/webhookRoute.js"
 
 const app = express()
 
@@ -35,7 +36,8 @@ const upload = multer({
 const allowedOrigins = [
   "https://watome-frontend.vercel.app",
   "http://localhost:3000",
-  "http://127.0.0.1:3000"
+  "http://127.0.0.1:3000",
+  "https://watome.com"
 ];
 
 const corsOptions = {
@@ -70,6 +72,7 @@ app.use("/api/missions", missionRoutes)
 app.use("/api/stats", statsRoutes)
 app.use("/api/plans", planRoutes)
 app.use("/api/favorites", favoriteRoutes)
+app.use("/api", webhookRoutes)
 
 // In serverless environments (like Vercel), we export the Express app as the handler.
 // When running locally, start the server normally.
