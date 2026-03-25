@@ -1,5 +1,6 @@
 import prisma from "../lib/db.js"
 import { Resend } from "resend"
+import { cleanPhoneNumber } from "../lib/utils.js"
 
 // initialize resend client (requires RESEND_API_KEY in env)
 const resend = new Resend(process.env.RESEND_API_KEY)
@@ -120,7 +121,7 @@ export const createMission = async (req, res) => {
             apartmentType,
             description,
             customerEmail: customerEmail || null,
-            customerPhone: customerPhone || null,
+            customerPhone: customerPhone ? cleanPhoneNumber(customerPhone) : null,
             customerName: customerName || null,
             agentId: agentId || null
         }
@@ -261,7 +262,7 @@ export const acceptMission = async (req, res) => {
             `
             
             await resend.emails.send({
-                from: "Watome <onboarding@resend.dev>",
+                from: "Watome <noreply@contact.watome.com>",
                 to: updated.user.email,
                 subject,
                 html: fr + en

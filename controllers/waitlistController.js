@@ -40,7 +40,7 @@ export const registerWaitlist = async (req, res) => {
         `
 
           const { data, error } = await resend.emails.send({
-            from: "Watome <onboarding@resend.dev>",
+            from: "Watome <noreply@contact.watome.com>",
             to: [email],
             subject,
             html: bilingualHtml,
@@ -94,7 +94,7 @@ export const announceWaitlist = async (req, res) => {
         `
         for (const email of toEmails) {
             await resend.emails.send({
-                from: "Watome <onboarding@resend.dev>",
+                from: "Watome <noreply@contact.watome.com>",
                 to: email,
                 subject: combinedSubject,
                 html: combinedHtml

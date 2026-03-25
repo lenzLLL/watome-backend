@@ -136,7 +136,7 @@ const sendBookingNotification = async (booking, action) => {
 
         if (subject && htmlContent) {
             const { data, error } = await resend.emails.send({
-                from: "Watome <onboarding@resend.dev>",
+                from: "Watome <noreply@contact.watome.com>",
                 to: customer.email,
                 subject: subject,
                 html: htmlContent

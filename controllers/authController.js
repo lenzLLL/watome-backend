@@ -3,6 +3,7 @@ import { genSalt, hash, compare } from "bcrypt"
 import jwt from "jsonwebtoken"
 import { v4 as uuidv4 } from "uuid"
 import { Resend } from "resend"
+import { cleanPhoneNumber } from "../lib/utils.js"
 
 // initialize resend client with API key from env
 const resend = new Resend(process.env.RESEND_API_KEY)
@@ -20,7 +21,7 @@ const sendActivationMail = async (user) => {
     const frontend = process.env.FRONTEND_URL || "http://localhost:3000"
     const link = `${frontend}/activate-account?token=${user.activationToken}`
     const { data, error } = await resend.emails.send({
-        from: "Watome <onboarding@resend.dev>",
+        from: "Watome <noreply@contact.watome.com>",
         to: user.email,
         subject: "Activez votre compte Watome / Activate your Watome account",
         html: `
@@ -101,7 +102,7 @@ export const signup = async (req,res,next) => {
                 password:await generatePassword(password),
                 firstname: first,
                 lastname: last,
-                phone,
+                phone: phone ? cleanPhoneNumber(phone) : null,
                 agence,
                 address: addr,
                 city,
@@ -235,7 +236,7 @@ export const requestPasswordReset = async (req, res) => {
         const frontend = process.env.FRONTEND_URL || "http://localhost:3000"
         const link = `${frontend}/reset-password?token=${token}`
         await resend.emails.send({
-            from: "Watome <onboarding@resend.dev>",
+            from: "Watome <noreply@contact.watome.com>",
             to: user.email,
             subject: "Réinitialisation de mot de passe / Password reset",
             html: `
@@ -372,7 +373,7 @@ export const register = async (req, res) => {
                 password: hashedPassword,
                 firstname: firstName,
                 lastname: lastName,
-                phone,
+                phone: phone ? cleanPhoneNumber(phone) : null,
                 address,
                 categoryAccount: categoryAccount || "CUSTOMER",
                 activationToken,

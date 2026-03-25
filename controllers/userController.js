@@ -1,4 +1,5 @@
 ﻿import prisma from "../lib/db.js"
+import { cleanPhoneNumber } from "../lib/utils.js"
 
 // helper to check admin
 const isAdmin = (user) => user && user.categoryAccount === "ADMIN"
@@ -630,73 +631,36 @@ export const getMe = async (req, res) => {
     }
 }
 
-export const updateUser = async (req, res) => {
+export const updateMe = async (req, res) => {
     try {
-        const id = req.params.id
-        if (!isAdmin(req.user) && req.user.userId !== id) {
-            return res.status(403).json({ error: "Forbidden" })
-        }
+        const id = req.user.userId
         const data = { ...req.body }
-        // prevent id/email change maybe
+
+        // Prevent id/email change
         delete data.id
-        if (data.email) delete data.email
-        // only admin may modify category directly
+        delete data.email
+
+        // Only admin may modify category directly
         if (data.categoryAccount && !isAdmin(req.user)) {
             delete data.categoryAccount
         }
-        const user = await prisma.user.update({ where: { id }, data })
-        return res.status(200).json(user)
-    } catch (err) {
-        console.error(err)
-        return res.status(500).json({ error: "Internal Server Error" })
-    }
-}
 
-export const updateMe = async (req, res) => {
-    try {
-        console.log("updateMe called with body:", req.body)
-        const id = req.user.userId
-
-        // Only allow properties that actually exist on the User model.
-        // Passing unknown properties (e.g. `bio`) to Prisma causes a validation error.
-        // Map known aliases: `bio` -> `desc`.
-        const rawData = { ...req.body }
-        if (typeof rawData.bio === "string" && rawData.desc === undefined) {
-            rawData.desc = rawData.bio
+        // Clean phone number if provided
+        if (data.phone) {
+            data.phone = cleanPhoneNumber(data.phone)
         }
 
-        const allowedFields = new Set([
-            "firstname",
-            "lastname",
-            "phone",
-            "agence",
-            "city",
-            "country",
-            "address",
-            "desc",
-            "profilePicture",
-            "languages",
-            "experience",
-            "salesCount",
-            "specialties",
-            "bio"
-        ])
-
-        let data = Object.fromEntries(
-            Object.entries(rawData).filter(([key]) => allowedFields.has(key))
-        )
-
-        // Convert empty strings into null for optional fields to avoid unique constraint issues.
-        // This is especially important for `phone` (which is unique) and other optional metadata.
+        // Trim string fields and set to null if empty
         const optionalFields = [
             "phone",
-            "agence",
+            "address",
             "city",
             "country",
-            "address",
             "desc",
-            "profilePicture",
+            "agence",
+            "languages",
             "experience",
+            "specialties",
             "bio"
         ]
         for (const key of optionalFields) {
@@ -714,6 +678,36 @@ export const updateMe = async (req, res) => {
 
         const updatedUser = await prisma.user.update({ where: { id }, data })
         return res.status(200).json(updatedUser)
+    } catch (err) {
+        console.error(err)
+        return res.status(500).json({ error: "Internal Server Error" })
+    }
+}
+
+
+
+export const updateUser = async (req, res) => {
+    try {
+        const id = req.params.id
+        if (!isAdmin(req.user) && req.user.userId !== id) {
+            return res.status(403).json({ error: "Forbidden" })
+        }
+        const data = { ...req.body }
+        // prevent id/email change maybe
+        delete data.id
+        if (data.email) delete data.email
+        // only admin may modify category directly
+        if (data.categoryAccount && !isAdmin(req.user)) {
+            delete data.categoryAccount
+        }
+
+        // Clean phone number if provided
+        if (data.phone) {
+            data.phone = cleanPhoneNumber(data.phone)
+        }
+
+        const user = await prisma.user.update({ where: { id }, data })
+        return res.status(200).json(user)
     } catch (err) {
         console.error(err)
         return res.status(500).json({ error: "Internal Server Error" })
