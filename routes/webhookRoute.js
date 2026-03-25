@@ -4,7 +4,7 @@ import { prisma } from '../lib/prisma.js';
 const router = express.Router();
 
 // Webhook pour Freemopay
-router.post('/freemopay/webhook', async (req, res) => {
+router.post('/webhook', async (req, res) => {
   try {
     const data = req.body;
     console.log("Webhook Freemopay reçu :", JSON.stringify(data, null, 2));

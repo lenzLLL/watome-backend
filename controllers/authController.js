@@ -360,6 +360,15 @@ export const register = async (req, res) => {
             return res.status(400).json({ error: "Cet email est déjà utilisé" })
         }
 
+        // Check if phone already exists (only if phone is provided)
+        if (phone) {
+            const cleanedPhone = cleanPhoneNumber(phone)
+            const existingPhoneUser = await prisma.user.findUnique({ where: { phone: cleanedPhone } })
+            if (existingPhoneUser) {
+                return res.status(400).json({ error: "Ce numéro de téléphone est déjà utilisé" })
+            }
+        }
+
         // Generate activation token
         const activationToken = uuidv4()
 
@@ -397,8 +406,25 @@ export const register = async (req, res) => {
             }
         })
     } catch (err) {
-        console.error(err)
-        return res.status(500).json({ error: "Internal Server Error" })
+        console.error("Registration error:", err)
+
+        // Handle Prisma unique constraint errors
+        if (err.code === 'P2002') {
+            const field = err.meta?.target?.[0]
+            if (field === 'email') {
+                return res.status(400).json({ error: "Cet email est déjà utilisé" })
+            } else if (field === 'phone') {
+                return res.status(400).json({ error: "Ce numéro de téléphone est déjà utilisé" })
+            }
+            return res.status(400).json({ error: "Une valeur unique est déjà utilisée" })
+        }
+
+        // Handle other validation errors
+        if (err.name === 'ValidationError') {
+            return res.status(400).json({ error: "Données invalides fournies" })
+        }
+
+        return res.status(500).json({ error: "Erreur lors de la création du compte. Veuillez réessayer." })
     }
 }
 

@@ -72,7 +72,7 @@ app.use("/api/missions", missionRoutes)
 app.use("/api/stats", statsRoutes)
 app.use("/api/plans", planRoutes)
 app.use("/api/favorites", favoriteRoutes)
-app.use("/api", webhookRoutes)
+app.use("/freemopay", webhookRoutes)
 
 // In serverless environments (like Vercel), we export the Express app as the handler.
 // When running locally, start the server normally.
