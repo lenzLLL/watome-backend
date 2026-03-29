@@ -1,10 +1,34 @@
 ﻿import prisma from "../lib/db.js"
+import { PayunitClient } from '@payunit/nodejs-sdk';
 import { genSalt, hash, compare } from "bcrypt"
 import jwt from "jsonwebtoken"
 import { v4 as uuidv4 } from "uuid"
 import { Resend } from "resend"
 import { cleanPhoneNumber } from "../lib/utils.js"
 
+const payunitClient = new PayunitClient({
+  baseURL: process.env.PAYUNIT_BASE_URL || 'https://gateway.payunit.net',
+  apiKey: process.env.PAYUNIT_KEY,
+  apiUsername: process.env.API_USERNAME,
+  apiPassword: process.env.API_PASSWORD,
+  mode: process.env.PAYUNIT_MODE || 'test',
+});
+
+// Helper function to clean phone number for PayUnit (remove country code, keep only local digits)
+const cleanPhoneForPayUnit = (phoneNumber) => {
+  if (!phoneNumber) return '';
+
+  // Remove all non-digit characters
+  const digitsOnly = phoneNumber.replace(/\D/g, '');
+
+  // If it starts with country code (237 for Cameroon), remove it
+  if (digitsOnly.startsWith('237') && digitsOnly.length > 3) {
+    return digitsOnly.substring(3);
+  }
+
+  // Return last 8-10 digits (local number format)
+  return digitsOnly.slice(-10);
+};
 // initialize resend client with API key from env
 const resend = new Resend(process.env.RESEND_API_KEY)
 
@@ -431,109 +455,191 @@ export const register = async (req, res) => {
 // process payment and create subscription
 export const processPayment = async (req, res) => {
     try {
-        const { planId, paymentMethod, amount } = req.body
+        const { planId, paymentMethod, amount, phone, returnUrl, notifyUrl } = req.body;
         const userId = req.user.userId; // From JWT middleware
 
-        if (!planId) {
-            return res.status(400).json({ error: "ID du plan requis" })
+        if (!planId || !paymentMethod || amount === undefined) {
+            return res.status(400).json({ error: "planId, paymentMethod et amount sont requis" });
         }
 
         // Find user by ID from JWT
-        const user = await prisma.user.findUnique({ where: { id: userId } })
+        const user = await prisma.user.findUnique({ where: { id: userId } });
         if (!user) {
-            return res.status(404).json({ error: "Utilisateur non trouvé" })
+            return res.status(404).json({ error: "Utilisateur non trouvé" });
         }
 
         // Find plan
-        const plan = await prisma.planSubscription.findUnique({ where: { id: planId } })
+        const plan = await prisma.planSubscription.findUnique({ where: { id: planId } });
         if (!plan) {
-            return res.status(404).json({ error: "Plan non trouvé" })
+            return res.status(404).json({ error: "Plan non trouvé" });
         }
 
-        // Check existing subscription to determine action
-        const existingSubscription = await prisma.userSubscription.findUnique({
-            where: { userId: user.id },
-            include: { plan: true }
-        })
+        // Decide gateway based on payment method
+        let gateway = null;
+        if (paymentMethod === 'om') gateway = 'CM_ORANGE';
+        else if (paymentMethod === 'momo') gateway = 'CM_MTNMOMO';
+        else if (paymentMethod === 'card') gateway = 'CARD';
+        else gateway = paymentMethod;
 
-        let action = 'SUBSCRIBE';
-        if (existingSubscription) {
-            if (existingSubscription.planId === planId) {
-                action = 'RENEW';
-            } else if (plan.price > existingSubscription.plan.price) {
-                action = 'UPGRADE';
-            } else if (plan.price < existingSubscription.plan.price) {
-                action = 'DOWNGRADE';
-            }
-        }
+        const transactionId = `TXN_${Date.now()}_${Math.floor(Math.random() * 9000 + 1000)}`;
 
-        const startDate = new Date();
-        const endDate = new Date(startDate);
-        endDate.setMonth(endDate.getMonth() + plan.monthDuration);
+        // PayUnit requires HTTPS for webhook URLs - ensure we use HTTPS
+        const baseUrl = (process.env.BACKEND_URL || 'https://your-domain.com').replace(/^http:/, 'https:');
+        const webhookUrl = notifyUrl || process.env.PAYUNIT_NOTIFY_URL || `${baseUrl}/api/webhooks/payunit`;
 
-        // Create or update subscription
-        const subscription = await prisma.userSubscription.upsert({
-            where: { userId: user.id },
-            create: {
+        const payunitPayload = {
+            total_amount: amount,
+            currency: 'XAF',
+            transaction_id: transactionId,
+            payment_country: 'CM',
+            gateway,
+            phone_number: cleanPhoneForPayUnit(phone || user.phone || ''),
+            return_url: returnUrl || process.env.PAYUNIT_RETURN_URL || `${baseUrl}/payment/success`,
+            notify_url: webhookUrl,
+            redirect_on_failed: 'yes',
+            custom_fields: {
                 userId: user.id,
                 planId,
-                startDate: startDate,
-                endDate: endDate,
-                paymentMethod,
-                amount,
-                status: "ACTIVE"
+                action: 'SUBSCRIBE',
             },
-            update: {
-                planId,
-                startDate: startDate,
-                endDate: endDate,
-                paymentMethod,
-                amount,
-                status: "ACTIVE"
-            }
-        })
+        };
 
-        // Handle property visibility based on plan limits
-        const userProperties = await prisma.property.findMany({
-            where: { userId: user.id },
-            orderBy: { createdAt: 'desc' }
-        })
-
-        if (userProperties.length > plan.visiblePropertiesLimit) {
-            const propertiesToHide = userProperties.slice(plan.visiblePropertiesLimit)
-            await prisma.property.updateMany({
-                where: { id: { in: propertiesToHide.map(p => p.id) } },
-                data: { isVisible: false }
-            })
-            console.log(`Cached ${propertiesToHide.length} properties due to plan limit (${plan.visiblePropertiesLimit})`)
+        // Call PayUnit API
+        let payunitResult;
+        if (paymentMethod === 'om' || paymentMethod === 'momo') {
+            payunitResult = await payunitClient.collections.initiateAndMakePaymentMobileMoney(payunitPayload);
+        } else {
+            payunitResult = await payunitClient.collections.initiatePayment({
+                ...payunitPayload,
+                pay_with: gateway
+            });
         }
 
-        // Record payment in subscription history
+        // create pending history entry
         await prisma.subscriptionHistory.create({
             data: {
                 userId: user.id,
-                planId: planId,
-                action: action,
-                amount: amount,
-                paymentMethod: paymentMethod,
-                paymentStatus: 'COMPLETED',
-                startDate: startDate,
-                endDate: endDate,
-                notes: existingSubscription ? `Changed from ${existingSubscription.plan.name}` : null
+                planId,
+                action: 'SUBSCRIBE',
+                amount,
+                paymentMethod,
+                paymentStatus: 'PENDING',
+                transactionId,
+                startDate: new Date(),
+                endDate: new Date(new Date().setMonth(new Date().getMonth() + plan.monthDuration)),
+                notes: 'PayUnit transaction initiated'
+            }
+        });
+        console.log(payunitResult)
+        console.log(payunitResult)
+        return res.status(200).json({
+            message: 'Paiement initié',
+            transactionId,
+            status: 'PENDING',
+            payunitResult
+        });
+    } catch (err) {
+        console.error('Payment error:', err);
+        return res.status(500).json({ error: 'Erreur de paiement' });
+    }
+};
+
+// PayUnit webhook endpoint
+export const payunitWebhook = async (req, res) => {
+    try {
+        console.log('PayUnit Webhook received:', {
+            method: req.method,
+            url: req.url,
+            headers: req.headers,
+            body: req.body
+        });
+
+        const body = req.body || {}
+        const transactionId = body.transaction_id || body.transactionId || body.txn_id || body.reference
+        const eventStatus = (body.status || body.paymentStatus || body.transaction_status || '').toString().toLowerCase()
+
+        console.log('Webhook data extracted:', { transactionId, eventStatus, body });
+
+        if (!transactionId) {
+            console.error('Webhook error: transaction_id missing');
+            return res.status(400).json({ error: 'transaction_id requis' })
+        }
+
+        const history = await prisma.subscriptionHistory.findFirst({
+            where: { transactionId: transactionId }
+        });
+
+        console.log('Database lookup result:', { found: !!history, historyId: history?.id });
+
+        if (!history) {
+            console.warn(`Webhook: transaction inconnue: ${transactionId}`);
+            return res.status(404).json({ error: 'Historique non trouvé' })
+        }
+
+        let paymentStatus = 'FAILED'
+        if (/success|completed|approved|paid/.test(eventStatus)) {
+            paymentStatus = 'COMPLETED'
+        } else if (/pending|processing/.test(eventStatus)) {
+            paymentStatus = 'PENDING'
+        }
+
+        console.log('Updating payment status:', { historyId: history.id, oldStatus: history.paymentStatus, newStatus: paymentStatus });
+
+        await prisma.subscriptionHistory.update({
+            where: { id: history.id },
+            data: {
+                paymentStatus,
+                notes: `Webhook reçu: ${eventStatus} (${JSON.stringify(body)})`
             }
         })
 
-        return res.status(200).json({
-            message: "Paiement traité avec succès",
-            subscription: {
-                id: subscription.id,
-                planId: subscription.planId,
-                status: subscription.status
+        if (paymentStatus === 'COMPLETED') {
+            console.log('Payment completed, creating/updating subscription for user:', history.userId);
+
+            const plan = await prisma.planSubscription.findUnique({ where: { id: history.planId } })
+            if (plan) {
+                const startDate = history.startDate || new Date()
+                const endDate = history.endDate || new Date(new Date(startDate).setMonth(new Date(startDate).getMonth() + plan.monthDuration))
+
+                console.log('Creating/updating user subscription:', {
+                    userId: history.userId,
+                    planId: history.planId,
+                    startDate,
+                    endDate
+                });
+
+                await prisma.userSubscription.upsert({
+                    where: { userId: history.userId },
+                    create: {
+                        userId: history.userId,
+                        planId: history.planId,
+                        startDate,
+                        endDate,
+                        paymentMethod: history.paymentMethod,
+                        amount: history.amount,
+                        status: 'ACTIVE'
+                    },
+                    update: {
+                        planId: history.planId,
+                        startDate,
+                        endDate,
+                        paymentMethod: history.paymentMethod,
+                        amount: history.amount,
+                        status: 'ACTIVE'
+                    }
+                })
+
+                console.log('User subscription created/updated successfully');
+            } else {
+                console.error('Plan not found:', history.planId);
             }
-        })
+        }
+
+        console.log('Webhook processing completed successfully');
+        return res.status(200).json({ message: 'Webhook traité' })
     } catch (err) {
-        console.error(err)
-        return res.status(500).json({ error: "Internal Server Error" })
+        console.error('PayUnit webhook error:', err)
+        return res.status(500).json({ error: 'Erreur webhook' })
     }
 }
 

@@ -8,13 +8,11 @@ export const verifyToken = (req, res, next) => {
         const authHeader = req.headers["authorization"];
         if (authHeader.startsWith("Bearer ")) {
             token = authHeader.split(" ")[1];
-            console.log('VerifyToken - Token extracted from Bearer header');
         }
     }
 
     if (!token && req.cookies?.authToken) {
         token = req.cookies.authToken;
-        console.log('VerifyToken - Token extracted from authToken cookie');
     }
 
     if (!token && req.headers.cookie) {
@@ -22,7 +20,6 @@ export const verifyToken = (req, res, next) => {
         const match = cookieString.match(/(?:^|; )authToken=([^;]+)/);
         if (match) {
             token = decodeURIComponent(match[1]);
-            console.log('VerifyToken - Token extracted from Cookie header');
         }
     }
 
@@ -33,7 +30,6 @@ export const verifyToken = (req, res, next) => {
 
     try {
         const decoded = jwt.verify(token, process.env.JWT_KEY);
-        console.log('VerifyToken - Token decoded:', decoded);
         // attach payload to request for downstream handlers
         req.user = decoded;
         next();

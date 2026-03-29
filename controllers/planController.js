@@ -1,7 +1,5 @@
 import { PrismaClient } from "@prisma/client";
-
 const prisma = new PrismaClient();
-
 export const getPlanSubscriptions = async (req, res) => {
   try {
     const plans = await prisma.planSubscription.findMany({
@@ -58,6 +56,7 @@ export const createPlanSubscription = async (req, res) => {
       }
     });
 
+
     return res.status(201).json(plan);
   } catch (error) {
     console.error('Error creating plan:', error);
@@ -79,7 +78,9 @@ export const updatePlanSubscription = async (req, res) => {
         ...(infos && { infos }),
         ...(visiblePropertiesLimit && { visiblePropertiesLimit })
       }
+      
     });
+
 
     return res.status(200).json(plan);
   } catch (error) {

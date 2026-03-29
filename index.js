@@ -37,14 +37,19 @@ const allowedOrigins = [
   "https://watome-frontend.vercel.app",
   "http://localhost:3000",
   "http://127.0.0.1:3000",
-  "https://www.watome.com"
+  "https://www.watome.com",
+  "https://gateway.payunit.net" // Allow PayUnit webhooks
 ];
 
 const corsOptions = {
   origin: (origin, callback) => {
-    // Allow requests with no origin (like mobile apps, curl, Postman)
+    // Allow requests with no origin (like mobile apps, curl, Postman, webhooks)
     if (!origin) return callback(null, true);
     if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    // Allow PayUnit gateway domain for webhooks
+    if (origin && origin.includes('payunit.net')) {
       return callback(null, true);
     }
     return callback(new Error("CORS policy: Origin not allowed"));
@@ -72,7 +77,7 @@ app.use("/api/missions", missionRoutes)
 app.use("/api/stats", statsRoutes)
 app.use("/api/plans", planRoutes)
 app.use("/api/favorites", favoriteRoutes)
-app.use("/freemopay", webhookRoutes)
+app.use("/api/webhooks", webhookRoutes)
 
 // In serverless environments (like Vercel), we export the Express app as the handler.
 // When running locally, start the server normally.
