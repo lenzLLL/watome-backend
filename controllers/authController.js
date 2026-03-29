@@ -562,6 +562,7 @@ export const processPayment = async (req, res) => {
 // PayUnit webhook endpoint
 export const payunitWebhook = async (req, res) => {
     try {
+        console.log('PayUnit Webhook received Lenz');
         console.log('PayUnit Webhook received:', {
             method: req.method,
             url: req.url,
@@ -572,8 +573,9 @@ export const payunitWebhook = async (req, res) => {
         const body = req.body || {}
         const transactionId = body.transaction_id || body.transactionId || body.txn_id || body.reference
         const eventStatus = (body.status || body.paymentStatus || body.transaction_status || '').toString().toLowerCase()
+        const message = (body.message || '').toString().toLowerCase()
 
-        console.log('Webhook data extracted:', { transactionId, eventStatus, body });
+        console.log('Webhook data extracted:', { transactionId, eventStatus, message, body });
 
         if (!transactionId) {
             console.error('Webhook error: transaction_id missing');
@@ -592,23 +594,30 @@ export const payunitWebhook = async (req, res) => {
         }
 
         let paymentStatus = 'FAILED'
-        if (/success|completed|approved|paid/.test(eventStatus)) {
+        if (/success|completed|approved|paid/.test(eventStatus) || /payment completed|transaction successful/.test(message)) {
             paymentStatus = 'COMPLETED'
-        } else if (/pending|processing/.test(eventStatus)) {
+        } else if (/pending|processing|initiated|in progress/.test(eventStatus) || /payment in progress|transaction initiated/.test(message)) {
             paymentStatus = 'PENDING'
+        } else if (/failed|cancelled|declined|error|rejected/.test(eventStatus) || /payment failed|transaction failed|insufficient funds/.test(message)) {
+            paymentStatus = 'FAILED'
         }
 
         console.log('Updating payment status:', { historyId: history.id, oldStatus: history.paymentStatus, newStatus: paymentStatus });
 
-        await prisma.subscriptionHistory.update({
-            where: { id: history.id },
-            data: {
-                paymentStatus,
-                notes: `Webhook reçu: ${eventStatus} (${JSON.stringify(body)})`
-            }
-        })
+        // Only update if status is actually changing or if it's a final status
+        if (history.paymentStatus !== paymentStatus || paymentStatus === 'COMPLETED' || paymentStatus === 'FAILED') {
+            await prisma.subscriptionHistory.update({
+                where: { id: history.id },
+                data: {
+                    paymentStatus,
+                    notes: `Webhook reçu: ${eventStatus} (${message}) - ${JSON.stringify(body)}`
+                }
+            })
+        } else {
+            console.log('Payment status unchanged, skipping update');
+        }
 
-        if (paymentStatus === 'COMPLETED') {
+        if (paymentStatus === 'COMPLETED' && history.paymentStatus !== 'COMPLETED') {
             console.log('Payment completed, creating/updating subscription for user:', history.userId);
 
             const plan = await prisma.planSubscription.findUnique({ where: { id: history.planId } })
@@ -651,7 +660,11 @@ export const payunitWebhook = async (req, res) => {
         }
 
         console.log('Webhook processing completed successfully');
-        return res.status(200).json({ message: 'Webhook traité' })
+        return res.status(200).json({ 
+            message: 'Webhook traité avec succès',
+            transactionId,
+            status: paymentStatus
+        })
     } catch (err) {
         console.error('PayUnit webhook error:', err)
         return res.status(500).json({ error: 'Erreur webhook' })

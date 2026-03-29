@@ -41,6 +41,14 @@ const getVisibleLimit = async (userId) => {
     return user.subscription?.visiblePropertiesLimit ?? 5
 }
 
+const getTotalPropertiesLimit = async (userId) => {
+    const visibleLimit = await getVisibleLimit(userId)
+    // Business rule: doublons allowed, max total properties = 2x visible limit
+    // For backward compatibility, use 10 if visibleLimit is missing/invalid
+    const computed = visibleLimit && visibleLimit > 0 ? visibleLimit * 2 : 10
+    return Math.max(computed, 10)
+}
+
 // Returns all properties owned by the authenticated agent (no visibility filtering)
 export const getAgentPublicProperties = async (req, res) => {
     try {
@@ -293,12 +301,23 @@ export const createProperty = async (req, res) => {
 
         // if isVisible not provided, schema default is true — treat undefined as true for validation
         const willBeVisible = data.hasOwnProperty('isVisible') ? Boolean(data.isVisible) : true
+
+        // enforce total property limit first
+        const totalLimit = await getTotalPropertiesLimit(req.user.userId)
+        const totalCount = await prisma.property.count({ where: { userId: req.user.userId } })
+        if (totalCount >= totalLimit) {
+            return res.status(403).json({
+                error: `Total property limit reached (${totalCount}/${totalLimit})`,
+                details: `Votre forfait permet jusqu'à ${totalLimit} annonces au total, dont ${await getVisibleLimit(req.user.userId)} visibles.`
+            })
+        }
+
         // enforce visible limit only when the property will be visible
         if (willBeVisible) {
             const limit = await getVisibleLimit(req.user.userId)
-            const count = await prisma.property.count({ where: { userId: req.user.userId, isVisible: true } })
-            if (limit && count >= limit) {
-                return res.status(403).json({ error: `Visible property limit reached (${limit})` })
+            const visibleCount = await prisma.property.count({ where: { userId: req.user.userId, isVisible: true } })
+            if (limit && visibleCount >= limit) {
+                return res.status(403).json({ error: `Visible property limit reached (${visibleCount}/${limit})` })
             }
         }
         data.isVisible = willBeVisible
