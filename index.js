@@ -35,7 +35,11 @@ const upload = multer({
 
 const allowedOrigins = [
   "http://localhost:3000",
+  "http://127.0.0.1:3000",
   "https://www.watome.com",
+  "https://watome.com",
+  "https://watome-frontend.vercel.app",
+  "https://watome-backend.vercel.app",
   "https://gateway.payunit.net" // Allow PayUnit webhooks
 ];
 
@@ -46,10 +50,15 @@ const corsOptions = {
     if (allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
+    // Allow all watome domains and subdomains
+    if (origin && (origin.includes('watome.com') || origin.includes('watome.vercel.app'))) {
+      return callback(null, true);
+    }
     // Allow PayUnit gateway domain for webhooks
     if (origin && origin.includes('payunit.net')) {
       return callback(null, true);
     }
+    console.log('CORS blocked origin:', origin);
     return callback(new Error("CORS policy: Origin not allowed"));
   },
   methods: ["GET", "POST", "DELETE", "PUT", "PATCH", "OPTIONS"],
