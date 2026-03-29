@@ -6,13 +6,24 @@ import { v4 as uuidv4 } from "uuid"
 import { Resend } from "resend"
 import { cleanPhoneNumber } from "../lib/utils.js"
 
-const payunitClient = new PayunitClient({
-  baseURL: process.env.PAYUNIT_BASE_URL || 'https://gateway.payunit.net',
-  apiKey: process.env.PAYUNIT_KEY,
-  apiUsername: process.env.API_USERNAME,
-  apiPassword: process.env.API_PASSWORD,
-  mode: process.env.PAYUNIT_MODE || 'test',
-});
+// Initialize PayUnit client conditionally
+let payunitClient = null;
+try {
+  if (process.env.PAYUNIT_KEY && process.env.API_USERNAME && process.env.API_PASSWORD) {
+    payunitClient = new PayunitClient({
+      baseURL: process.env.PAYUNIT_BASE_URL || 'https://gateway.payunit.net',
+      apiKey: process.env.PAYUNIT_KEY,
+      apiUsername: process.env.API_USERNAME,
+      apiPassword: process.env.API_PASSWORD,
+      mode: process.env.PAYUNIT_MODE || 'test',
+    });
+  } else {
+    console.warn('PayUnit environment variables not configured. Payment features will be disabled.');
+  }
+} catch (error) {
+  console.error('Failed to initialize PayUnit client:', error);
+  payunitClient = null;
+}
 
 // Helper function to clean phone number for PayUnit (remove country code, keep only local digits)
 const cleanPhoneForPayUnit = (phoneNumber) => {
@@ -455,6 +466,10 @@ export const register = async (req, res) => {
 // process payment and create subscription
 export const processPayment = async (req, res) => {
     try {
+        if (!payunitClient) {
+            return res.status(500).json({ error: "Service de paiement non configuré" });
+        }
+
         const { planId, paymentMethod, amount, phone, returnUrl, notifyUrl } = req.body;
         const userId = req.user.userId; // From JWT middleware
 
