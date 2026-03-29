@@ -13,7 +13,6 @@ import missionRoutes from "./routes/missionRoute.js"
 import statsRoutes from "./routes/statsRoute.js"
 import planRoutes from "./routes/planRoute.js"
 import favoriteRoutes from "./routes/favoriteRoute.js"
-import webhookRoutes from "./routes/webhookRoute.js"
 
 const app = express()
 
@@ -34,31 +33,19 @@ const upload = multer({
 })
 
 const allowedOrigins = [
+  "https://watome-frontend.vercel.app",
   "http://localhost:3000",
   "http://127.0.0.1:3000",
-  "https://www.watome.com",
-  "https://watome.com",
-  "https://watome-frontend.vercel.app",
-  "https://watome-backend.vercel.app",
-  "https://gateway.payunit.net" // Allow PayUnit webhooks
+  "https://www.watome.com"
 ];
 
 const corsOptions = {
   origin: (origin, callback) => {
-    // Allow requests with no origin (like mobile apps, curl, Postman, webhooks)
+    // Allow requests with no origin (like mobile apps, curl, Postman)
     if (!origin) return callback(null, true);
     if (allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
-    // Allow all watome domains and subdomains
-    if (origin && (origin.includes('watome.com') || origin.includes('watome.vercel.app'))) {
-      return callback(null, true);
-    }
-    // Allow PayUnit gateway domain for webhooks
-    if (origin && origin.includes('payunit.net')) {
-      return callback(null, true);
-    }
-    console.log('CORS blocked origin:', origin);
     return callback(new Error("CORS policy: Origin not allowed"));
   },
   methods: ["GET", "POST", "DELETE", "PUT", "PATCH", "OPTIONS"],
@@ -84,7 +71,6 @@ app.use("/api/missions", missionRoutes)
 app.use("/api/stats", statsRoutes)
 app.use("/api/plans", planRoutes)
 app.use("/api/favorites", favoriteRoutes)
-app.use("/api/webhooks", webhookRoutes)
 
 // In serverless environments (like Vercel), we export the Express app as the handler.
 // When running locally, start the server normally.
